@@ -61,17 +61,19 @@ def get_p_values(train_in, train_out, test_in, test_out, arr_length):
     return fdr_p
 
 
-def get_ensembl_dict(file_path):
-    with open(file_path) as file:
-        gtf = list(file)
+def ensembl2symbol(file, mode='forward'):
+    id2symbol = {}
+    with open(file) as fin:
+        for line in fin:
+            if '#' not in line and 'gene_id "' in line and 'gene_name "' in line:
+                ens_id = line.split('gene_id "')[1].split('"')[0]
+                symbol = line.split('gene_name "')[1].split('"')[0]
 
-    gtf = [x for x in gtf if not x.startswith('#')]
-    gtf = [x for x in gtf if 'gene_id "' in x and 'gene_name "' in x]
+                if mode == 'forward':
+                    id2symbol[ens_id] = symbol
+                else:
+                    id2symbol[symbol] = ens_id
 
-    if len(gtf) == 0:
-        print('Change gene_id " and gene_name " formats')
-    else:
-        gtf = list(map(lambda x: (x.split('gene_id "')[1].split('"')[0], x.split('gene_name "')[1].split('"')[0]), gtf))
-        gtf = dict(set(gtf))
+    exceptions = [['ENSG00000011638', 'TMEM159'], []]
 
-        return gtf
+    return id2symbol
