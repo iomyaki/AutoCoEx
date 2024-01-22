@@ -50,8 +50,8 @@ def get_p_values(train_in, train_out, test_in, test_out, arr_length):
         # perform the Mann–Whitney test for each difference vector
         mw_p.append(
             stats.mannwhitneyu(
-                np.subtract(train_out[:, i], train_in[:, i]),
-                np.subtract(test_out[:, i], test_in[:, i])
+                np.abs(np.subtract(train_out[:, i], train_in[:, i])),
+                np.abs(np.subtract(test_out[:, i], test_in[:, i]))
             ).pvalue
         )
 
