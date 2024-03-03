@@ -1,63 +1,100 @@
+import gc
+import logging
+
 import numpy as np
 import pandas as pd
 import torch
-from sklearn.preprocessing import MinMaxScaler
+
 from archs import AE
-from funcs import extension_loader, get_p_values
+from funcs import concat_datasets, data_loader, get_p_values, scale_dataset
 
 
-def find_anomalies(train_input: str, test_input: str):
+def find_anomalies(device,
+                   control_file,
+                   not_control_file,
+                   name,
+                   scaling='minmax',
+                   n_models=2
+                   ):
+    # miscellaneous
+    # torch.manual_seed(manual_seed)
+
     # load data
+    control = data_loader(control_file)
+    not_control = data_loader(not_control_file)
+    samples_initial = len(control)
+    external_layer_size = len(control.columns)
+    parameter_names = control.columns.values.tolist()
+    logging.info(f'Data loaded')
 
-    df_train = extension_loader(train_input)
-    df_test = extension_loader(test_input)
+    # concatenate control and not control data
+    merged_data = concat_datasets(control, not_control)
+    logging.info(f'Control concatenated with not control')
 
-    genes = df_train.columns.values.tolist()
+    # scale merged data
+    merged_data_scaled = scale_dataset(merged_data, scaling)
+    logging.info(f'Merged data scaled')
 
-    scaler = MinMaxScaler()
+    # separate scaled merged data & send them to the device
+    control_scaled = merged_data_scaled[:samples_initial]
+    not_control_scaled = merged_data_scaled[samples_initial:]
 
-    df_train_scaled = scaler.fit_transform(df_train.to_numpy())
-    df_test_scaled = scaler.fit_transform(df_test.to_numpy())
+    control_scaled_tensor = torch.tensor(control_scaled).to(torch.float32).to(device)
+    not_control_scaled_tensor = torch.tensor(not_control_scaled).to(torch.float32).to(device)
 
-    # set parameters
+    logging.info(f'Scaled merged data split')
 
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    print(f'Device: {device}')
+    # load data of predictive models
+    predictive_model_characteristics = pd.read_csv(f'characteristics_predict_{name}.csv')
 
-    bottleneck_size = 100
-    external_layer_size = len(df_train.columns)
+    # for each model, find p-values
+    pvalues = pd.DataFrame(index=parameter_names)
 
-    model = AE(external_layer_size, bottleneck_size).to(device)
+    iterator = zip(predictive_model_characteristics['model_name'].to_list(),
+                   predictive_model_characteristics['bottleneck_size'].to_list()
+                   )
 
-    # prepare data for the NN
+    logging.info('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
+    logging.info(f'Using predictive model set: {name}')
+    logging.info('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
 
-    train_in = torch.tensor(df_train_scaled).to(torch.float32).to(device)
-    test_in = torch.tensor(df_test_scaled).to(torch.float32).to(device)
+    for model_name, bottleneck_size in iterator:
+        logging.info('========================================================================================')
+        logging.info(f'Current model: {model_name}')
 
-    # load the model and get reconstructions
+        # initialize a model
+        model = AE(external_layer_size, bottleneck_size).to(device)
+        logging.info('Model initialized')
 
-    with torch.no_grad():
-        model.load_state_dict(torch.load('model.pt'))
-        model.eval()
+        # send data to the model
+        with torch.no_grad():
+            model.load_state_dict(torch.load(f'model_{model_name}.pt'))
+            model.eval()
 
-        _, train_out = model(train_in)
-        _, test_out = model(test_in)
+            _, control_out = model(control_scaled_tensor)
+            _, not_control_out = model(not_control_scaled_tensor)
+        logging.info('Model has reconstructed its input')
 
-    torch.cuda.empty_cache()
+        # calculate p-values for parameters
+        fdr_p_val = get_p_values(control_scaled,
+                                 np.array(control_out.detach().cpu()),
+                                 not_control_scaled,
+                                 np.array(not_control_out.detach().cpu()),
+                                 external_layer_size
+                                 )
 
-    # get p-values
+        pvalues[f'neck {bottleneck_size}'] = fdr_p_val
 
-    fdr_p_val = get_p_values(
-        df_train_scaled,
-        np.array(train_out.detach().cpu()),
-        df_test_scaled,
-        np.array(test_out.detach().cpu()),
-        external_layer_size
-    )
+        logging.info('p-values calculated')
 
-    # present results
+        # clear memory
+        del model
+        del fdr_p_val
+        torch.cuda.empty_cache()
+        gc.collect()
 
-    df_fdr_p_val = pd.DataFrame(fdr_p_val, index=genes, columns=['FDR-corrected p-values'])
-    df_fdr_p_val.to_excel('fdr_p_val.xlsx')
+    # calculate the proportion of models where p-value is significant for parameters
+    pvalues['significant, % of models'] = pvalues.apply(lambda row: (row < 0.05).sum() / n_models, axis=1)
 
-    print('List of genes with differential co-expression has been saved')
+    # save the result
+    pvalues.to_csv(f'fdr_p_values_{name}.csv')
