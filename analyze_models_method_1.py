@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from archs import AE
+from classes import AE
 
 
 def analyze_models_method_1(device,
@@ -52,8 +52,8 @@ def analyze_models_method_1(device,
             result_column_filtered = pd.concat([pvalues_sorted_short, adjacency_matrix_column_filtered], axis=1)
 
             # save the result
-            result_index_filtered.to_csv(f'analysis_result_method_1_index_filtered_{model_name}.csv')
-            result_column_filtered.to_csv(f'analysis_result_method_1_column_filtered_{model_name}.csv')
+            result_index_filtered.to_csv(f'analysis_method_1_index_filtered_{model_name}.csv')
+            result_column_filtered.to_csv(f'analysis_method_1_column_filtered_{model_name}.csv')
             logging.info(f'Model {model_name} analysis (m. 1) results saved')
 
             # clear memory

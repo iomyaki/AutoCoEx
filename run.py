@@ -28,13 +28,14 @@ if __name__ == '__main__':
     logging.info(f'Device: {device}')
 
     # fit models and find anomalies
-    external_layer_size, general_min, general_max = fit_models(device,
-                                                               control_file,
-                                                               not_control_file,
-                                                               f'{name}_ctrl'
-                                                               )
+    external_layer_size, general_min, general_max, control_scaled, control_scaled_tensor = fit_models(device,
+                                                                                                      control_file,
+                                                                                                      not_control_file,
+                                                                                                      f'{name}_ctrl'
+                                                                                                      )
     pvalues_sorted_short, parameter_names = find_anomalies(device,
-                                                           control_file,
+                                                           control_scaled,
+                                                           control_scaled_tensor,
                                                            not_control_file,
                                                            f'{name}_ctrl',
                                                            general_min,
@@ -62,4 +63,9 @@ if __name__ == '__main__':
                             pvalues_sorted_short,
                             parameter_names
                             )
-    analyze_models_method_2(device, external_layer_size, iterator_ctrl, iterator_not_ctrl, parameter_names)
+    analyze_models_method_2(device,
+                            external_layer_size,
+                            iterator_ctrl,
+                            iterator_not_ctrl,
+                            parameter_names
+                            )

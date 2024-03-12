@@ -5,37 +5,35 @@ import numpy as np
 import pandas as pd
 import torch
 
-from archs import AE
+from classes import AE
 from funcs import data_loader, custom_min_max_scaling, get_p_values
 
 
 def find_anomalies(device,
-                   control_file,
+                   control_scaled,
+                   control_scaled_tensor,
                    not_control_file,
                    name,
                    general_min,
                    general_max,
                    scaling='minmax',
-                   cutoff=100,
-                   n_models=2
+                   cutoff=100,  # how many anomalous genes to select
+                   n_models=100
                    ):
     # miscellaneous
     # torch.manual_seed(manual_seed)
 
     # load data
-    control = data_loader(control_file)
     not_control = data_loader(not_control_file)
-    external_layer_size = len(control.columns)
-    parameter_names = control.columns.values.tolist()
+    external_layer_size = len(not_control.columns)
+    parameter_names = not_control.columns.values.tolist()
     logging.info(f'Data loaded')
 
     # scale merged data
-    control_scaled = custom_min_max_scaling(control, general_min, general_max)
-    not_control_scaled = custom_min_max_scaling(not_control, general_min, general_max)
+    not_control_scaled = custom_min_max_scaling(not_control, general_min, general_max).to_numpy()
     logging.info(f'Data scaled')
 
     # send scaled data to the device
-    control_scaled_tensor = torch.tensor(control_scaled).to(torch.float32).to(device)
     not_control_scaled_tensor = torch.tensor(not_control_scaled).to(torch.float32).to(device)
     logging.info(f'Scaled data sent to the device')
 

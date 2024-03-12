@@ -6,7 +6,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import torch
 
-from archs import AE
+from classes import AE
 from funcs import calculate_correlation_matrix
 
 

@@ -1,4 +1,5 @@
 import torch.nn as nn
+from torch.utils.data import Dataset
 
 
 class MLAE(nn.Module):
@@ -47,6 +48,7 @@ class AE(nn.Module):
         return encoded, decoded
 
 
+'''
 class AE_ELU(nn.Module):
     def __init__(self, input_size, bottleneck):
         super().__init__()
@@ -64,3 +66,17 @@ class AE_ELU(nn.Module):
         encoded = self.encoder(x)
         decoded = self.decoder(encoded)
         return encoded, decoded
+'''
+
+
+class CustomDataset(Dataset):
+    def __init__(self, data):
+        self.data = data
+
+    def __len__(self):
+        return int(self.data.size(dim=0))
+
+    def __getitem__(self, index):
+        return {'noise_data': self.data[index][0],
+                'orig_data': self.data[index][1]
+                }

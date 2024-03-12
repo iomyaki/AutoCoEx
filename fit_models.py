@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 from sklearn.metrics import r2_score, mean_squared_error
 
-from archs import AE
+from classes import AE
 from funcs import (
     data_loader,
     get_std_vector,
@@ -17,6 +17,7 @@ from funcs import (
     get_general_min_max,
     custom_min_max_scaling,
     gpu_train_test_split,
+    torch_dataloading,
     get_bottlenecks,
     training_loop,
     draw_loss_plots,
@@ -36,8 +37,8 @@ def fit_models(device,
                batch_size=8,
                lr=1e-4,
                weight_decay=1e-6,
-               epochs=10,
-               n_models=2
+               epochs=20,
+               n_models=100
                ):
     def iterate_bottleneck_sizes(device,
                                  train_data,
@@ -143,45 +144,61 @@ def fit_models(device,
     # load data
     control = data_loader(control_file)
     not_control = data_loader(not_control_file)
+    control_len = len(control)
     external_layer_size = len(control.columns)
-    logging.info(f'Data loaded')
+    logging.info('Data loaded')
 
     # calculate standard deviation for each parameter in control data
     std_vector = get_std_vector(control)
-    logging.info(f'Std vector calculated')
+    logging.info('Std vector calculated')
 
     # multiply control data
     control_multiplied = repeat_dataset(control, multiplier)
-    logging.info(f'Control multiplied')
+    logging.info('Control multiplied')
 
     # add noise to the multiplied control data
     control_multiplied_noisy = add_noise(control_multiplied, std_vector, noise_factor)
-    logging.info(f'Noise added to the multiplied control')
+    logging.info('Noise added to the multiplied control')
 
     # calculate vectors of min. and max. for noisy multiplied control data and (ordinary) not control data
     general_min, general_max = get_general_min_max(control_multiplied_noisy, not_control)
-    logging.info(f'Vectors of min. and max. calculated')
+    logging.info('Vectors of min. and max. calculated')
 
-    # scale noisy multiplied control data
+    # scale noisy and clear multiplied control data
     control_multiplied_noisy_scaled = custom_min_max_scaling(control_multiplied_noisy, general_min, general_max)
-    logging.info(f'Noisy multiplied control data scaled')
+    control_multiplied_scaled = custom_min_max_scaling(control_multiplied, general_min, general_max)
+    logging.info('Noisy and clear multiplied control data scaled')
 
-    # perform a train/test split and send data to the GPU
-    train_data, test_data = gpu_train_test_split(control_multiplied_noisy_scaled.to_numpy(),
-                                                 test_size,
-                                                 batch_size,
-                                                 device
-                                                 )
-    logging.info(f'Train/test split performed')
+    # combine noisy and clear multiplied control data
+    combined_data = list(zip(control_multiplied_noisy_scaled.values.tolist(),
+                             control_multiplied_scaled.values.tolist()
+                             )
+                         )
+    logging.info('Noisy and clear multiplied control data combined')
+
+    # perform random train/test split and send data to the GPU
+    train_tensor, test_tensor = gpu_train_test_split(combined_data,
+                                                     control_len,
+                                                     multiplier,
+                                                     test_size,
+                                                     device
+                                                     )
+    del combined_data
+    logging.info('Train/test split performed')
+
+    # send train/test data into CustomDataset and then — to DataLoader
+    train_data = torch_dataloading(train_tensor, batch_size)
+    test_data = torch_dataloading(test_tensor, batch_size)
+    logging.info('DataLoaders created')
 
     # generate the list of bottleneck sizes for preliminary models
     bottleneck_sizes_prelim = get_bottlenecks(external_layer_size)
-    logging.info(f'Bottlenecks calculated')
+    logging.info('Bottlenecks calculated')
 
     # generate models with different bottleneck sizes
     criterion = nn.MSELoss()
 
-    control_scaled = custom_min_max_scaling(control, general_min, general_max)
+    control_scaled = custom_min_max_scaling(control, general_min, general_max).to_numpy()
     control_scaled_tensor = torch.tensor(control_scaled).to(torch.float32).to(device)
 
     preliminary_model_characteristics = iterate_bottleneck_sizes(device,
@@ -235,4 +252,4 @@ def fit_models(device,
                              'predict'
                              )
 
-    return external_layer_size, general_min, general_max
+    return external_layer_size, general_min, general_max, control_scaled, control_scaled_tensor
