@@ -2,6 +2,8 @@ import gc
 import logging
 
 import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 import torch
 
 from archs import AE
@@ -11,11 +13,13 @@ from funcs import calculate_correlation_matrix
 def analyze_models_method_2(device,
                             external_layer_size: int,
                             iterator_ctrl,
-                            iterator_not_ctrl
+                            iterator_not_ctrl,
+                            parameter_names
                             ):
     def iterate_model_set(device,
                           external_layer_size,
-                          iterator
+                          iterator,
+                          parameter_names
                           ):
         for model_name, bottleneck_size in iterator:
             logging.info(f'Now analyzing {model_name}')
@@ -33,9 +37,16 @@ def analyze_models_method_2(device,
                         break
 
             # calculate correlation matrix
-            corr_matrix = pd.DataFrame(calculate_correlation_matrix(weight_matrix, external_layer_size))
+            corr_matrix = pd.DataFrame(calculate_correlation_matrix(weight_matrix, external_layer_size),
+                                       index=parameter_names,
+                                       columns=parameter_names
+                                       )
 
-            corr_matrix.to_csv(f'analysis_result_method_2_{model_name}.csv', index=False)
+            corr_matrix.to_csv(f'analysis_method_2_corr_matrix_{model_name}.csv')
+
+            sns.clustermap(corr_matrix)
+            plt.savefig(f'analysis_method_2_clustermap_{model_name}.png')
+
             logging.info(f'Model {model_name} analysis (m. 2) result saved')
 
             # clear memory
@@ -45,18 +56,22 @@ def analyze_models_method_2(device,
             torch.cuda.empty_cache()
             gc.collect()
 
+            break
+
     # analyze every model
     logging.info('Analysis by method #2 started')
 
     iterate_model_set(device,
                       external_layer_size,
-                      iterator_ctrl
+                      iterator_ctrl,
+                      parameter_names
                       )
     logging.info('Control models analysed (m. 2)')
 
     iterate_model_set(device,
                       external_layer_size,
-                      iterator_not_ctrl
+                      iterator_not_ctrl,
+                      parameter_names
                       )
     logging.info('Not control models analysed (m. 2)')
 

@@ -14,8 +14,8 @@ from funcs import (
     get_std_vector,
     repeat_dataset,
     add_noise,
-    concat_datasets,
-    scale_dataset,
+    get_general_min_max,
+    custom_min_max_scaling,
     gpu_train_test_split,
     get_bottlenecks,
     training_loop,
@@ -36,8 +36,8 @@ def fit_models(device,
                batch_size=8,
                lr=1e-4,
                weight_decay=1e-6,
-               epochs=20,
-               n_models=100
+               epochs=10,
+               n_models=2
                ):
     def iterate_bottleneck_sizes(device,
                                  train_data,
@@ -143,7 +143,6 @@ def fit_models(device,
     # load data
     control = data_loader(control_file)
     not_control = data_loader(not_control_file)
-    samples_initial = len(control)
     external_layer_size = len(control.columns)
     logging.info(f'Data loaded')
 
@@ -159,16 +158,16 @@ def fit_models(device,
     control_multiplied_noisy = add_noise(control_multiplied, std_vector, noise_factor)
     logging.info(f'Noise added to the multiplied control')
 
-    # concatenate noisy multiplied control data and (ordinary) not control data
-    merged_data = concat_datasets(control_multiplied_noisy, not_control)
-    logging.info(f'Noisy multiplied control concatenated with not control')
+    # calculate vectors of min. and max. for noisy multiplied control data and (ordinary) not control data
+    general_min, general_max = get_general_min_max(control_multiplied_noisy, not_control)
+    logging.info(f'Vectors of min. and max. calculated')
 
-    # scale merged data
-    merged_data_scaled = scale_dataset(merged_data, scaling)
-    logging.info(f'Merged data scaled')
+    # scale noisy multiplied control data
+    control_multiplied_noisy_scaled = custom_min_max_scaling(control_multiplied_noisy, general_min, general_max)
+    logging.info(f'Noisy multiplied control data scaled')
 
     # perform a train/test split and send data to the GPU
-    train_data, test_data = gpu_train_test_split(merged_data_scaled[:samples_initial * multiplier],
+    train_data, test_data = gpu_train_test_split(control_multiplied_noisy_scaled.to_numpy(),
                                                  test_size,
                                                  batch_size,
                                                  device
@@ -182,7 +181,7 @@ def fit_models(device,
     # generate models with different bottleneck sizes
     criterion = nn.MSELoss()
 
-    control_scaled = scale_dataset(control, scaling)
+    control_scaled = custom_min_max_scaling(control, general_min, general_max)
     control_scaled_tensor = torch.tensor(control_scaled).to(torch.float32).to(device)
 
     preliminary_model_characteristics = iterate_bottleneck_sizes(device,
@@ -204,11 +203,11 @@ def fit_models(device,
     # find the optimal bottleneck
     optimal_bottleneck_mse = find_saturation_point(bottleneck_sizes_prelim,
                                                    preliminary_model_characteristics['MSE'].tolist(),
-                                                   external_layer_size
+                                                   'mse'
                                                    )
     optimal_bottleneck_r_sq = find_saturation_point(bottleneck_sizes_prelim,
                                                     preliminary_model_characteristics['R^2'].tolist(),
-                                                    external_layer_size
+                                                    'r_sq'
                                                     )
     optimal_bottleneck = (optimal_bottleneck_mse + optimal_bottleneck_r_sq) // 2
 
@@ -236,4 +235,4 @@ def fit_models(device,
                              'predict'
                              )
 
-    return external_layer_size
+    return external_layer_size, general_min, general_max

@@ -6,7 +6,6 @@ import pandas as pd
 import scipy.stats as stats
 import torch
 import matplotlib.pyplot as plt
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from statsmodels.stats.multitest import fdrcorrection
 from torch.utils.data import DataLoader
 
@@ -53,19 +52,22 @@ def add_noise(df: pd.DataFrame, std_vector: list, noise_factor: float) -> pd.Dat
     return noisy_df
 
 
-def concat_datasets(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
-    return pd.concat([df1, df2], ignore_index=True)
+def get_general_min_max(df1: pd.DataFrame, df2: pd.DataFrame, axis=0) -> tuple:
+    min_1, min_2 = df1.min(axis=axis), df2.min(axis=axis)
+    max_1, max_2 = df1.max(axis=axis), df2.max(axis=axis)
+
+    for i in range(len(min_1)):
+        min_1[i] = min(min_1[i], min_2[i])
+        max_1[i] = max(max_1[i], max_2[i])
+
+    return min_1, max_1
 
 
-def scale_dataset(df: pd.DataFrame, scaling: str) -> np.ndarray:
-    if scaling.lower() == 'log':
-        return np.log((df + 1).to_numpy())
-    elif scaling.lower() == 'standard':
-        scaler = StandardScaler()
-        return scaler.fit_transform(df.to_numpy())
-    else:
-        scaler = MinMaxScaler()
-        return scaler.fit_transform(df.to_numpy())
+def custom_min_max_scaling(df: pd.DataFrame,
+                           min_custom: pd.Series,
+                           max_custom: pd.Series,
+                           feature_range=(0, 1)) -> pd.DataFrame:
+    return (df - min_custom) / (max_custom - min_custom) * (feature_range[1] - feature_range[0]) + feature_range[0]
 
 
 def gpu_train_test_split(df: np.ndarray,
@@ -86,7 +88,8 @@ def gpu_train_test_split(df: np.ndarray,
     del split_num
 
     return (DataLoader(train_data, batch_size=batch_size, shuffle=True),
-            DataLoader(test_data, batch_size=batch_size, shuffle=True))
+            DataLoader(test_data, batch_size=batch_size, shuffle=True)
+            )
 
 
 def get_bottlenecks(external_layer_size: int) -> list:
@@ -181,12 +184,15 @@ def draw_loss_plots(model_name: str, train_loss: list, eval_loss: list) -> None:
     plt.clf()
 
 
-def find_saturation_point(x: list, y: list, external_layer_size: int) -> int:
-    diff_vector = np.diff(y)
-    for i in range(len(diff_vector)):
-        if abs(diff_vector[i]) < (max(y) - min(y)) * 0.001:
-            return x[i]
-    return external_layer_size // 2
+def find_saturation_point(x: list, y: list, y_type: str) -> int:
+    points = len(x)
+    for i in range(1, points):
+        if abs((y[i] - y[i - 1])) / (x[i] - x[i - 1]) < 1e-4:
+            if y_type.lower() == 'mse' or y_type.lower() == 'r_sq' and y[-1] >= 0.81:
+                return x[i]
+            else:
+                logging.critical(f'Model can not train on these data: R^2 value with neck {x[-1]} is {y[-1]}')
+    logging.critical(f'Model can not train on these data: no significant MSE change')
 
 
 def get_p_values(train_in, train_out, test_in, test_out, arr_length):

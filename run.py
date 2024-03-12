@@ -10,7 +10,7 @@ from fit_models import fit_models
 from funcs import get_device
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     control_file = sys.argv[1]
     not_control_file = sys.argv[2]
     name = sys.argv[3]
@@ -28,8 +28,18 @@ if __name__ == "__main__":
     logging.info(f'Device: {device}')
 
     # fit models and find anomalies
-    external_layer_size = fit_models(device, control_file, not_control_file, f'{name}_ctrl')
-    find_anomalies(device, control_file, not_control_file, f'{name}_ctrl')
+    external_layer_size, general_min, general_max = fit_models(device,
+                                                               control_file,
+                                                               not_control_file,
+                                                               f'{name}_ctrl'
+                                                               )
+    pvalues_sorted_short, parameter_names = find_anomalies(device,
+                                                           control_file,
+                                                           not_control_file,
+                                                           f'{name}_ctrl',
+                                                           general_min,
+                                                           general_max
+                                                           )
     fit_models(device, not_control_file, control_file, f'{name}_not_ctrl')
 
     # create model iterators for further analysis
@@ -44,6 +54,12 @@ if __name__ == "__main__":
                             characteristics_not_ctrl['bottleneck_size'].to_list()
                             )
 
-    # model analysis
-    analyze_models_method_1(device, external_layer_size, iterator_ctrl, iterator_not_ctrl)
-    analyze_models_method_2(device, external_layer_size, iterator_ctrl, iterator_not_ctrl)
+    # perform model analysis
+    analyze_models_method_1(device,
+                            external_layer_size,
+                            iterator_ctrl,
+                            iterator_not_ctrl,
+                            pvalues_sorted_short,
+                            parameter_names
+                            )
+    analyze_models_method_2(device, external_layer_size, iterator_ctrl, iterator_not_ctrl, parameter_names)
