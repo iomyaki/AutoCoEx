@@ -7,7 +7,6 @@ import pandas as pd
 import scipy.stats as stats
 import torch
 import matplotlib.pyplot as plt
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from statsmodels.stats.multitest import fdrcorrection
 from torch.utils.data import DataLoader
 
@@ -56,10 +55,6 @@ def add_noise(df: pd.DataFrame, std_vector: list, noise_factor: float) -> pd.Dat
     return noisy_df
 
 
-#def concat_datasets(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
-    #return pd.concat([df1, df2], ignore_index=True)
-
-
 def get_general_min_max(df1: pd.DataFrame, df2: pd.DataFrame, axis=0) -> tuple:
     min_1, min_2 = df1.min(axis=axis), df2.min(axis=axis)
     max_1, max_2 = df1.max(axis=axis), df2.max(axis=axis)
@@ -76,39 +71,6 @@ def custom_min_max_scaling(df: pd.DataFrame,
                            max_custom: pd.Series,
                            feature_range=(0, 1)) -> pd.DataFrame:
     return (df - min_custom) / (max_custom - min_custom) * (feature_range[1] - feature_range[0]) + feature_range[0]
-
-
-#def scale_dataset(df: pd.DataFrame, scaling: str) -> np.ndarray:
-    #if scaling.lower() == 'log':
-        #return np.log((df + 1).to_numpy())
-    #elif scaling.lower() == 'standard':
-        #scaler = StandardScaler()
-        #return scaler.fit_transform(df.to_numpy())
-    #else:
-        #scaler = MinMaxScaler()
-        #return scaler.fit_transform(df.to_numpy())
-
-
-#def gpu_train_test_split(df: np.ndarray,
-                         #test_size: float,
-                         #batch_size: int,
-                         #device: torch.device) -> tuple:
-    #"""
-    #Perform a train/test split and send data to the GPU
-    #"""
-
-    #df_tensor = torch.tensor(df).to(torch.float32).to(device)
-    #len_df_tensor = len(df_tensor)
-    #split_num = int(len_df_tensor * test_size)
-    #train_data, test_data = torch.utils.data.random_split(df_tensor, [len_df_tensor - split_num, split_num])
-
-    #del df_tensor
-    #del len_df_tensor
-    #del split_num
-
-    #return (DataLoader(train_data, batch_size=batch_size, shuffle=True),
-            #DataLoader(test_data, batch_size=batch_size, shuffle=True)
-            #)
 
 
 def gpu_train_test_split(data: list,
@@ -235,14 +197,6 @@ def draw_loss_plots(model_name: str, train_loss: list, eval_loss: list) -> None:
     plt.clf()
 
 
-#def find_saturation_point(x: list, y: list, external_layer_size: int) -> int:
-    #diff_vector = np.diff(y)
-    #for i in range(len(diff_vector)):
-        #if abs(diff_vector[i]) < (max(y) - min(y)) * 0.001:
-            #return x[i]
-    #return external_layer_size // 2
-
-
 def find_saturation_point(x: list, y: list, y_type: str) -> int:
     points = len(x)
     for i in range(1, points):
@@ -252,28 +206,6 @@ def find_saturation_point(x: list, y: list, y_type: str) -> int:
             else:
                 logging.critical(f'Model can not train on these data: R^2 value with neck {x[-1]} is {y[-1]}')
     logging.critical(f'Model can not train on these data: no significant MSE change')
-
-
-#def add_noise(batch, noise_factor=0.25):
-    #noisy_data = batch + torch.randn_like(batch) * noise_factor
-    #return noisy_data
-
-
-#def get_percentile(array, threshold=5):
-    #"""
-    #must receive Pandas DataFrame converted to a NumPy array, and scaled;
-    #default percentile is 5th
-    #"""
-
-    #df_scaled = pd.DataFrame(array)
-    #series = df_scaled.to_numpy().reshape(1, len(df_scaled.columns) * len(df_scaled.index))
-
-    #wo_zeros = np.delete(series, np.where(series == 0))
-    #wo_borders = np.delete(wo_zeros, np.where(wo_zeros == 1))
-
-    #percentile = np.percentile(wo_borders, threshold)
-
-    #return percentile
 
 
 def get_p_values(train_in, train_out, test_in, test_out, arr_length):
@@ -294,24 +226,6 @@ def get_p_values(train_in, train_out, test_in, test_out, arr_length):
     return fdr_p
 
 
-#def ensembl2symbol(file, mode='forward'):
-    #id2symbol = {}
-    #with open(file) as fin:
-        #for line in fin:
-            #if '#' not in line and 'gene_id "' in line and 'gene_name "' in line:
-                #ens_id = line.split('gene_id "')[1].split('"')[0]
-                #symbol = line.split('gene_name "')[1].split('"')[0]
-
-                #if mode == 'forward':
-                    #id2symbol[ens_id] = symbol
-                #else:
-                    #id2symbol[symbol] = ens_id
-
-    #exceptions = [['ENSG00000011638', 'TMEM159'], []]
-
-    #return id2symbol
-
-
 def calculate_correlation_matrix(weight_matrix, external_layer_size):
     corr_matrix = np.empty((external_layer_size, external_layer_size))
 
@@ -322,4 +236,3 @@ def calculate_correlation_matrix(weight_matrix, external_layer_size):
             corr_matrix[i][j], corr_matrix[j][i] = corr, corr
 
     return corr_matrix
-
